@@ -262,9 +262,14 @@ class SemanticActorHead(BaseActorHead):
         cache_embeddings: bool = True,
         fallback_mlp: bool = False,
     ):
+        print(f"[DEBUG] SemanticActorHead.__init__ called")
+        print(f"[DEBUG] state_dim: {state_dim}, action_dim: {action_dim}")
+        print(f"[DEBUG] descriptor_hidden_dim: {descriptor_hidden_dim}, action_emb_dim: {action_emb_dim}")
+        print(f"[DEBUG] use_gate: {use_gate}, use_bilinear_scoring: {use_bilinear_scoring}")
         assert discrete, "SemanticActorHead only supports discrete actions"
         assert action_dim == 9, "Expected 9 actions (4 moves + 5 switches)"
 
+        print("[DEBUG] Creating SemanticActorHead components...")
         # Use Discrete distribution for compatibility
         continuous_dist_type = None  # Not used for discrete actions
 
@@ -287,6 +292,8 @@ class SemanticActorHead(BaseActorHead):
         # Descriptor dimensions (will be determined dynamically)
         self.move_descriptor_dim = None
         self.switch_descriptor_dim = None
+
+        print("[DEBUG] SemanticActorHead initialization complete")
 
         # Descriptor encoders - initialized lazily after we know descriptor dims
         self.move_encoder = None

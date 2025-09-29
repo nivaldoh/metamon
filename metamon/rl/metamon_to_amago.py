@@ -114,9 +114,19 @@ def make_baseline_env(*args, **kwargs):
     Battle against a built-in baseline opponent
     """
     _block_warnings()
+    print(f"[DEBUG] make_baseline_env called with args: {args[:2] if args else 'none'}")
+    print(f"[DEBUG] make_baseline_env kwargs keys: {kwargs.keys() if kwargs else 'none'}")
+    if 'opponent_type' in kwargs:
+        print(f"[DEBUG] Opponent type: {kwargs['opponent_type']}")
+
+    print("[DEBUG] Creating BattleAgainstBaseline environment...")
     menv = BattleAgainstBaseline(*args, **kwargs)
     print("Made Baseline Env")
-    return MetamonAMAGOWrapper(menv)
+
+    print("[DEBUG] Wrapping with MetamonAMAGOWrapper...")
+    wrapped_env = MetamonAMAGOWrapper(menv)
+    print(f"[DEBUG] MetamonAMAGOWrapper created successfully")
+    return wrapped_env
 
 
 def make_placeholder_experiment(
@@ -183,16 +193,24 @@ class MetamonAMAGOWrapper(amago.envs.AMAGOEnv):
     """
 
     def __init__(self, metamon_env: PokeEnvWrapper):
+        print(f"[DEBUG] MetamonAMAGOWrapper.__init__ called")
+        print(f"[DEBUG] Environment type: {type(metamon_env).__name__}")
         self.metamon_action_space = metamon_env.metamon_action_space
+        print(f"[DEBUG] Action space type: {type(metamon_env.metamon_action_space).__name__}")
+
+        print("[DEBUG] Calling super().__init__...")
         super().__init__(
             env=metamon_env,
             env_name="metamon",
             batched_envs=1,
         )
+        print("[DEBUG] super().__init__ completed")
+
         assert isinstance(self.action_space, gym.spaces.Discrete)
         self.observation_space["illegal_actions"] = gym.spaces.Box(
             low=0, high=1, shape=(self.action_space.n,), dtype=bool
         )
+        print(f"[DEBUG] MetamonAMAGOWrapper initialization complete")
 
     def add_illegal_action_mask_to_obs(self, obs: dict, info: dict):
         # move legal action from info to obs
@@ -401,6 +419,8 @@ class MetamonSemanticActor(SemanticActorHead):
         cache_embeddings: bool = True,
         fallback_mlp: bool = False,
     ):
+        print(f"[DEBUG] MetamonSemanticActor.__init__ called")
+        print(f"[DEBUG] state_dim: {state_dim}, action_dim: {action_dim}, discrete: {discrete}")
         super().__init__(
             state_dim=state_dim,
             action_dim=action_dim,
@@ -417,6 +437,7 @@ class MetamonSemanticActor(SemanticActorHead):
             fallback_mlp=fallback_mlp,
         )
         self.mask_illegal_actions = mask_illegal_actions
+        print(f"[DEBUG] MetamonSemanticActor initialization complete")
 
     def actor_network_forward(
         self,
@@ -697,10 +718,91 @@ class MetamonAMAGOExperiment(amago.Experiment):
     Adds actions masking to the main AMAGO experiment, and leaves room for further tweaks.
     """
 
+    def start(self):
+        """Override start to add detailed debug logging"""
+        print("[DEBUG] MetamonAMAGOExperiment.start() called")
+
+        print("[DEBUG] Initializing datasets...")
+        self.init_dsets()
+        print("[DEBUG] Datasets initialized successfully")
+
+        print("[DEBUG] Initializing environments...")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            warnings.filterwarnings("always", category=amago.utils.AmagoWarning)
+            env_summary = self.init_envs()
+        print("[DEBUG] Environments initialized successfully")
+
+        print("[DEBUG] Initializing dataloaders...")
+        self.init_dloaders()
+        print("[DEBUG] Dataloaders initialized successfully")
+
+        print("[DEBUG] Initializing model...")
+        self.init_model()
+        print("[DEBUG] Model initialized successfully")
+
+        print("[DEBUG] Initializing checkpoints...")
+        self.init_checkpoints()
+        print("[DEBUG] Checkpoints initialized successfully")
+
+        print("[DEBUG] Initializing logger...")
+        self.init_logger()
+        print("[DEBUG] Logger initialized successfully")
+
+        if self.verbose:
+            print("[DEBUG] Printing summary...")
+            self.summary(env_summary=env_summary)
+            print("[DEBUG] Summary printed")
+
+        print("[DEBUG] MetamonAMAGOExperiment.start() completed")
+
     def init_envs(self):
+        print("[DEBUG] MetamonAMAGOExperiment.init_envs() called")
+        print(f"[DEBUG] parallel_actors: {self.parallel_actors}")
+        print(f"[DEBUG] env_mode: {self.env_mode}")
+
+        print("[DEBUG] Calling super().init_envs()...")
         out = super().init_envs()
+        print("[DEBUG] super().init_envs() completed")
+
+        print("[DEBUG] Calling take_long_break on validation environments...")
         amago.utils.call_async_env(self.val_envs, "take_long_break")
+        print("[DEBUG] take_long_break completed")
+
         return out
+
+    def init_model(self):
+        print("[DEBUG] MetamonAMAGOExperiment.init_model() called")
+        print(f"[DEBUG] Agent type: {self.agent_type}")
+        print(f"[DEBUG] Tstep encoder type: {self.tstep_encoder_type}")
+        print(f"[DEBUG] Trajectory encoder type: {self.traj_encoder_type}")
+
+        try:
+            print("[DEBUG] Calling super().init_model()...")
+            super().init_model()
+            print("[DEBUG] super().init_model() completed successfully")
+        except Exception as e:
+            print(f"[DEBUG ERROR] Failed during model initialization: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+    def init_dsets(self):
+        print("[DEBUG] MetamonAMAGOExperiment.init_dsets() called")
+        print(f"[DEBUG] Dataset type: {type(self.dataset).__name__}")
+
+        print("[DEBUG] Calling super().init_dsets()...")
+        super().init_dsets()
+        print("[DEBUG] super().init_dsets() completed")
+
+    def init_dloaders(self):
+        print("[DEBUG] MetamonAMAGOExperiment.init_dloaders() called")
+        print(f"[DEBUG] Batch size: {self.batch_size}")
+        print(f"[DEBUG] Dataloader workers: {self.dloader_workers}")
+
+        print("[DEBUG] Calling super().init_dloaders()...")
+        super().init_dloaders()
+        print("[DEBUG] super().init_dloaders() completed")
 
     def evaluate_val(self):
         amago.utils.call_async_env(self.val_envs, "resume_from_break")

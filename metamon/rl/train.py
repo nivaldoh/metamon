@@ -242,6 +242,8 @@ def create_offline_rl_trainer(
 
     # validation environments (evaluated throughout training)
     if eval_gens:
+        print(f"[DEBUG] Creating validation environments for generations: {eval_gens}")
+        print(f"[DEBUG] Number of opponent types: {len(EVAL_OPPONENTS)}")
         make_envs = [
             partial(
                 make_baseline_env,
@@ -255,11 +257,14 @@ def create_offline_rl_trainer(
             for gen in set(eval_gens)
             for opponent in EVAL_OPPONENTS
         ]
+        print(f"[DEBUG] Total validation environments to create: {len(make_envs)}")
     else:
+        print("[DEBUG] No eval_gens specified, creating placeholder environment")
         # turn off eval envs during training (do evals separately).
         make_envs = [partial(make_placeholder_env, obs_space, action_space)]
         val_timesteps_per_epoch = 0
 
+    print("[DEBUG] Creating MetamonAMAGOExperiment...")
     experiment = MetamonAMAGOExperiment(
         ## required ##
         run_name=run_name,
@@ -341,6 +346,7 @@ if __name__ == "__main__":
     )
 
     # quick-setup for an offline RL experiment
+    print(f"[DEBUG] Creating offline RL trainer with eval_gens={args.eval_gens}")
     experiment = create_offline_rl_trainer(
         ckpt_dir=args.save_dir,
         run_name=args.run_name,
@@ -360,9 +366,31 @@ if __name__ == "__main__":
         wandb_project=WANDB_PROJECT,
         wandb_entity=WANDB_ENTITY,
     )
-    experiment.start()
+    print("[DEBUG] Offline RL trainer created successfully")
+    print("[DEBUG] Starting experiment initialization...")
+    try:
+        experiment.start()
+        print("[DEBUG] Experiment started successfully")
+    except Exception as e:
+        print(f"[DEBUG ERROR] Failed to start experiment: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
     if args.ckpt is not None:
         # resume training from a checkpoint
+        print(f"[DEBUG] Loading checkpoint: {args.ckpt}")
         experiment.load_checkpoint(args.ckpt)
-    experiment.learn()
+        print("[DEBUG] Checkpoint loaded successfully")
+
+    print("[DEBUG] Starting learning phase...")
+    try:
+        experiment.learn()
+        print("[DEBUG] Learning completed successfully")
+    except Exception as e:
+        print(f"[DEBUG ERROR] Failed during learning: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
     wandb.finish()
