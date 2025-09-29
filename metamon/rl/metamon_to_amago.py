@@ -718,6 +718,19 @@ class MetamonAMAGOExperiment(amago.Experiment):
     Adds actions masking to the main AMAGO experiment, and leaves room for further tweaks.
     """
 
+    def __init__(self, *args, **kwargs):
+        # Fix the traj_save_len float issue - ensure it's an integer
+        if 'traj_save_len' not in kwargs:
+            kwargs['traj_save_len'] = int(1e10)
+        elif isinstance(kwargs['traj_save_len'], float):
+            kwargs['traj_save_len'] = int(kwargs['traj_save_len'])
+
+        # Also ensure max_seq_len is an integer if provided
+        if 'max_seq_len' in kwargs and isinstance(kwargs['max_seq_len'], float):
+            kwargs['max_seq_len'] = int(kwargs['max_seq_len'])
+
+        super().__init__(*args, **kwargs)
+
     def start(self):
         """Override start to add detailed debug logging"""
         print("[DEBUG] MetamonAMAGOExperiment.start() called")
