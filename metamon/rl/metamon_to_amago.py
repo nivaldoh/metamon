@@ -760,10 +760,24 @@ class MetamonAMAGOExperiment(amago.Experiment):
         print("[DEBUG] MetamonAMAGOExperiment.init_envs() called")
         print(f"[DEBUG] parallel_actors: {self.parallel_actors}")
         print(f"[DEBUG] env_mode: {self.env_mode}")
+        print(f"[DEBUG] async_env_mp_context: {self.async_env_mp_context}")
+
+        # Check what environments we're trying to create
+        print(f"[DEBUG] make_val_env type: {type(self.make_val_env)}")
+        if isinstance(self.make_val_env, list):
+            print(f"[DEBUG] Number of validation environments: {len(self.make_val_env)}")
 
         print("[DEBUG] Calling super().init_envs()...")
-        out = super().init_envs()
-        print("[DEBUG] super().init_envs() completed")
+        print("[DEBUG] This will create AsyncVectorEnv with multiprocessing...")
+
+        try:
+            out = super().init_envs()
+            print("[DEBUG] super().init_envs() completed")
+        except Exception as e:
+            print(f"[DEBUG ERROR] Failed in super().init_envs(): {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
         print("[DEBUG] Calling take_long_break on validation environments...")
         amago.utils.call_async_env(self.val_envs, "take_long_break")
