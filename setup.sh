@@ -11,7 +11,6 @@ AMAGO_HTTPS_REPO="https://github.com/UT-Austin-RPL/amago.git"
 
 # --- Install Metamon (editable) ---
 (
-  cd metamon
   python -m pip install -U pip
   python -m pip install -e .
 )
