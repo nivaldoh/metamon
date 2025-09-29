@@ -16,11 +16,11 @@ AMAGO_HTTPS_REPO="https://github.com/UT-Austin-RPL/amago.git"
 )
 
 # --- Clone AMAGO into Metamon root and install (editable) ---
-if [ ! -d "metamon/amago/.git" ]; then
-  git clone "${AMAGO_HTTPS_REPO}" metamon/amago
+if [ ! -d "amago/.git" ]; then
+  git clone "${AMAGO_HTTPS_REPO}" amago
 else
   echo "[info] amago already exists under metamon/; updating"
-  (cd metamon/amago && git fetch --all && git pull --rebase)
+  (cd amago && git fetch --all && git pull --rebase)
 fi
 
 (
