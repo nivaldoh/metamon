@@ -27,6 +27,7 @@ from metamon.env import (
     QueueOnLocalLadder,
     PokeAgentLadder,
 )
+from metamon.nets.semantic_actor import SemanticActorHead
 
 
 try:
@@ -354,6 +355,91 @@ class MetamonMaskedResidualActor(amago.nets.actor_critic.ResidualActor):
             mask = torch.logical_and(mask, ~no_options)
             mask = einops.repeat(mask, f"b l n -> b l {Gammas} n")
             dist_params.masked_fill_(mask, -float("inf"))
+        return dist_params
+
+
+@gin.configurable
+class MetamonSemanticActor(SemanticActorHead):
+    """Semantic actor head with illegal action masking for Metamon.
+
+    This wraps the SemanticActorHead to add illegal action masking,
+    similar to MetamonMaskedActor but for the semantic architecture.
+
+    Args:
+        state_dim: Dimension of state representations from trajectory encoder
+        action_dim: Number of actions (should be 9 for Pokémon)
+        discrete: Must be True for Pokémon action space
+        gammas: Multi-gamma discount factors for AMAGO training
+
+    Keyword Args:
+        mask_illegal_actions: Whether to mask illegal actions in logits
+        descriptor_hidden_dim: Hidden dimension for descriptor encoder
+        action_emb_dim: Dimension of encoded action embeddings
+        num_attention_heads: Number of heads for cross-attention scoring
+        use_gate: Whether to use hierarchical attack/switch gate
+        use_bilinear_scoring: Use bilinear scoring instead of cross-attention
+        dropout: Dropout rate for attention and networks
+        normalize_descriptors: Whether to normalize descriptor features
+        cache_embeddings: Cache action embeddings when they don't change
+        fallback_mlp: Include fallback MLP for baseline comparison
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        discrete: bool,
+        gammas: torch.Tensor,
+        mask_illegal_actions: bool = True,
+        descriptor_hidden_dim: int = 128,
+        action_emb_dim: int = 64,
+        num_attention_heads: int = 4,
+        use_gate: bool = True,
+        use_bilinear_scoring: bool = False,
+        dropout: float = 0.1,
+        normalize_descriptors: bool = True,
+        cache_embeddings: bool = True,
+        fallback_mlp: bool = False,
+    ):
+        super().__init__(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            discrete=discrete,
+            gammas=gammas,
+            descriptor_hidden_dim=descriptor_hidden_dim,
+            action_emb_dim=action_emb_dim,
+            num_attention_heads=num_attention_heads,
+            use_gate=use_gate,
+            use_bilinear_scoring=use_bilinear_scoring,
+            dropout=dropout,
+            normalize_descriptors=normalize_descriptors,
+            cache_embeddings=cache_embeddings,
+            fallback_mlp=fallback_mlp,
+        )
+        self.mask_illegal_actions = mask_illegal_actions
+
+    def actor_network_forward(
+        self,
+        state: torch.Tensor,
+        log_dict: Optional[dict[str, Any]] = None,
+        straight_from_obs: Optional[dict[str, torch.Tensor]] = None,
+    ) -> torch.Tensor:
+        # Get base semantic actor output
+        dist_params = super().actor_network_forward(
+            state, log_dict=log_dict, straight_from_obs=straight_from_obs
+        )
+
+        # Apply illegal action masking if requested
+        if self.mask_illegal_actions and straight_from_obs is not None:
+            if "illegal_actions" in straight_from_obs:
+                Batch, Len, Gammas, N = dist_params.shape
+                mask = straight_from_obs["illegal_actions"]
+                no_options = mask.all(dim=-1, keepdim=True)
+                # Prevent crash when no legal options
+                mask = torch.logical_and(mask, ~no_options)
+                mask = einops.repeat(mask, f"b l n -> b l {Gammas} n")
+                dist_params.masked_fill_(mask, -float("inf"))
+
         return dist_params
 
 

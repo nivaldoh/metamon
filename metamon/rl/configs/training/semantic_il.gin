@@ -1,0 +1,34 @@
+# Semantic Actor Imitation Learning Configuration
+# Based on il.gin but configured for semantic actor head
+
+import amago.agent
+import amago.experiment
+
+# Training hyperparameters (MINIMAL for testing)
+MetamonAMAGOExperiment.batch_size = 8  # Very small batch
+MetamonAMAGOExperiment.dloader_workers = 1  # Single worker
+MetamonAMAGOExperiment.epochs = 2  # Just 2 epochs for testing
+MetamonAMAGOExperiment.parallel_actors = 0  # No online collection for IL
+MetamonAMAGOExperiment.val_interval = 1
+MetamonAMAGOExperiment.train_batches_per_epoch = 10  # Just 10 batches per epoch
+MetamonAMAGOExperiment.val_timesteps_per_epoch = 500  # ~1 battle
+MetamonAMAGOExperiment.start_learning_at_epoch = 0
+MetamonAMAGOExperiment.start_collecting_at_epoch = 10000  # Never
+MetamonAMAGOExperiment.ckpt_interval = 1
+MetamonAMAGOExperiment.l2_coeff = 1e-4
+MetamonAMAGOExperiment.learning_rate = 1.5e-4
+MetamonAMAGOExperiment.grad_clip = 1.5
+MetamonAMAGOExperiment.critic_loss_weight = 10.0
+MetamonAMAGOExperiment.lr_warmup_steps = 1000
+
+# Agent configuration for IL (behavior cloning)
+agent.Agent.online_coeff = 0.0  # No online (TD3-like) loss
+agent.Agent.offline_coeff = 1.0  # Pure offline (BC) loss
+agent.Agent.use_multigamma = False  # Single gamma for IL
+agent.Agent.fake_filter = True  # No advantage filtering for pure BC
+agent.Agent.gamma = 0.999
+agent.Agent.tau = 1e-3  # Target EMA weight
+
+# Additional semantic actor specific settings
+# These will be merged with model-specific configs
+MetamonSemanticActor.dropout = 0.1  # Can be higher for IL to prevent overfitting
