@@ -25,6 +25,7 @@ fi
 
 (
   python -m pip install -e ./amago
+  python -m pip install amago[flash]
 )
 
 # --- Set up Pokemon Showdown server (submodule) ---
