@@ -374,12 +374,20 @@ class SemanticActorHead(BaseActorHead):
             nn.LayerNorm(self.action_emb_dim),
         )
 
+        # Move encoders to the same device as the rest of the model
+        # Find the device by checking an existing parameter
+        device = next(self.parameters()).device
+        self.move_encoder = self.move_encoder.to(device)
+        self.switch_encoder = self.switch_encoder.to(device)
+
         # Initialize bilinear matrix if needed
-        if self.use_bilinear_scoring:
+        if self.use_bilinear_scoring and self.bilinear_W is None:
             # Proper shape: [state_dim, action_emb_dim, 1] for output dimension
             self.bilinear_W = nn.Parameter(
-                torch.randn(self.state_dim, self.action_emb_dim, 1) * 0.01
+                torch.randn(self.state_dim, self.action_emb_dim, 1, device=device) * 0.01
             )
+            # Register the parameter with the module
+            self.register_parameter('bilinear_W', self.bilinear_W)
 
     def extract_action_descriptors(
         self, obs: Dict[str, torch.Tensor]
