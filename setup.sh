@@ -24,13 +24,12 @@ else
 fi
 
 (
-  cd metamon
   python -m pip install -e ./amago
 )
 
 # --- Set up Pokemon Showdown server (submodule) ---
 (
-  cd metamon/server/pokemon-showdown
+  cd server/pokemon-showdown
   # Prefer reproducible installs if package-lock.json exists
   if [ -f package-lock.json ]; then
     npm ci
