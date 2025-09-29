@@ -11,7 +11,7 @@ MetamonAMAGOExperiment.max_seq_len = 50  # Very short sequences for testing
 
 # Small Semantic Actor Configuration
 Agent.actor_type = @MetamonSemanticActor
-Agent.pass_obs_keys_to_actor = ["illegal_actions", "action_mask"]
+Agent.pass_obs_keys_to_actor = ["illegal_actions"]
 
 # Small model hyperparameters (MINIMAL for testing)
 MetamonSemanticActor.mask_illegal_actions = True
