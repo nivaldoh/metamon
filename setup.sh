@@ -50,10 +50,10 @@ fi
     npm install
   fi
 
+  # TODO: this gets stuck. Need to autoskip dialog
   # Start server in background (default port: 8000)
-  # --no-security is typical for local dev; remove for stricter mode
-  nohup node pokemon-showdown start --no-security > ../../ps.log 2>&1 &
-  echo "[info] Pokemon Showdown started (logs: metamon/ps.log)"
+  #   nohup node pokemon-showdown start --no-security > ../../ps.log 2>&1 &
+  #   echo "[info] Pokemon Showdown started (logs: metamon/ps.log)"
 )
 
 # --- Optional: use local cache or GCS fuse for datasets ---
