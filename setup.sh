@@ -6,19 +6,8 @@ METAMON_SSH_REPO="git@github.com:nivaldoh/metamon.git"
 AMAGO_HTTPS_REPO="https://github.com/UT-Austin-RPL/amago.git"
 
 # --- Clone Metamon (with submodules) ---
-if [ ! -d "metamon/.git" ]; then
-  git clone --recurse-submodules "${METAMON_SSH_REPO}" metamon
-else
-  echo "[info] metamon already exists; updating"
-  (cd metamon && git fetch --all && git pull --rebase)
-fi
-
-# Ensure submodule(s) are initialized & up-to-date (handles re-runs)
-(
-  cd metamon
-  git submodule sync --recursive
-  git submodule update --init --recursive
-)
+# Do this before running the script
+# git clone --recurse-submodules "${METAMON_SSH_REPO}" metamon
 
 # --- Install Metamon (editable) ---
 (
