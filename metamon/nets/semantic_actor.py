@@ -267,7 +267,19 @@ class SemanticActorHead(BaseActorHead):
         print(f"[DEBUG] descriptor_hidden_dim: {descriptor_hidden_dim}, action_emb_dim: {action_emb_dim}")
         print(f"[DEBUG] use_gate: {use_gate}, use_bilinear_scoring: {use_bilinear_scoring}")
         assert discrete, "SemanticActorHead only supports discrete actions"
-        assert action_dim == 9, "Expected 9 actions (4 moves + 5 switches)"
+
+        # Support both 9-action (MinimalActionSpace) and 13-action (DefaultActionSpace) spaces
+        if action_dim == 9:
+            print("[DEBUG] Using 9-action space (4 moves + 5 switches)")
+            self.num_moves = 4
+            self.num_switches = 5
+        elif action_dim == 13:
+            print("[DEBUG] Using 13-action space (4 moves + 5 switches + 4 tera moves)")
+            self.num_moves = 4
+            self.num_switches = 5
+            self.num_tera_moves = 4
+        else:
+            raise ValueError(f"Unsupported action_dim: {action_dim}. Expected 9 or 13 actions.")
 
         print("[DEBUG] Creating SemanticActorHead components...")
         # Use Discrete distribution for compatibility
@@ -625,7 +637,7 @@ class SemanticActorHead(BaseActorHead):
             switch_descriptors: [batch, seq_len, 5, switch_descriptor_dim]
 
         Returns:
-            action_embeddings: [batch, seq_len, 9, action_emb_dim]
+            action_embeddings: [batch, seq_len, action_dim, action_emb_dim]
         """
         B, L, _, move_dim = move_descriptors.shape
         _, _, _, switch_dim = switch_descriptors.shape
@@ -647,7 +659,12 @@ class SemanticActorHead(BaseActorHead):
         switch_embs = rearrange(switch_embs, "(b l n) d -> b l n d", b=B, l=L, n=5)
 
         # Concatenate all action embeddings
-        action_embs = torch.cat([move_embs, switch_embs], dim=2)  # [B, L, 9, emb_dim]
+        if self.action_dim == 13:
+            # For 13-action space, duplicate move embeddings for tera moves
+            tera_embs = move_embs.clone()  # Reuse move embeddings for tera moves
+            action_embs = torch.cat([move_embs, switch_embs, tera_embs], dim=2)  # [B, L, 13, emb_dim]
+        else:
+            action_embs = torch.cat([move_embs, switch_embs], dim=2)  # [B, L, 9, emb_dim]
 
         return action_embs
 
@@ -660,10 +677,10 @@ class SemanticActorHead(BaseActorHead):
 
         Args:
             state: [batch, seq_len, state_dim]
-            action_embs: [batch, seq_len, 9, action_emb_dim]
+            action_embs: [batch, seq_len, action_dim, action_emb_dim]
 
         Returns:
-            scores: [batch, seq_len, 9]
+            scores: [batch, seq_len, action_dim]
         """
         if self.use_bilinear_scoring:
             # Bilinear scoring: s^T W a
@@ -697,7 +714,7 @@ class SemanticActorHead(BaseActorHead):
             straight_from_obs: Raw observations for descriptor extraction
 
         Returns:
-            dist_params: [B, L, n_gammas, 9] logits for action distribution
+            dist_params: [B, L, n_gammas, action_dim] logits for action distribution
         """
         B, L, D = state.shape
         device = state.device
@@ -712,7 +729,7 @@ class SemanticActorHead(BaseActorHead):
         if straight_from_obs is None:
             # Create dummy observations for compatibility
             straight_from_obs = {
-                'action_mask': torch.ones(B, L, 9, device=device),
+                'action_mask': torch.ones(B, L, self.action_dim, device=device),
             }
 
         # Extract action descriptors
