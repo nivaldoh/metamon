@@ -149,7 +149,7 @@ if __name__ == "__main__":
         # use the base reward function
         reward_function = pretrained.reward_function
     # create a new policy that matches the pretrained policy's architecture
-    experiment = create_offline_rl_trainer(
+    experiment, accelerator_state = create_offline_rl_trainer(
         ckpt_dir=args.save_dir,
         run_name=args.run_name,
         model_gin_config=pretrained.model_gin_config_path,
@@ -180,4 +180,8 @@ if __name__ == "__main__":
     )
     # finetune!
     experiment.learn()
-    wandb.finish()
+
+    if wandb.run is not None and (
+        accelerator_state is None or accelerator_state.is_main_process
+    ):
+        wandb.finish()

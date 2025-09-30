@@ -1,6 +1,6 @@
 import os
 from functools import partial
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import wandb
 
@@ -9,6 +9,12 @@ import amago
 import metamon
 import metamon.rl
 import torch
+try:
+    from accelerate.state import AcceleratorState
+    from accelerate.utils import DistributedType
+except Exception:  # pragma: no cover - accelerate is optional at runtime
+    AcceleratorState = None  # type: ignore[assignment]
+    DistributedType = None  # type: ignore[assignment]
 from metamon.env import get_metamon_teams
 from metamon.interface import (
     TokenizedObservationSpace,
@@ -74,6 +80,28 @@ def _resolve_mixed_precision(requested: str) -> str:
         return "no"
 
     return requested
+
+
+def _get_accelerator_state() -> Optional["AcceleratorState"]:
+    """Return the current Accelerate state if initialized.
+
+    The training stack internally constructs an :class:`accelerate.Accelerator` when
+    needed, so we only query the state here to detect distributed launches without
+    creating new accelerator instances.
+    """
+
+    if AcceleratorState is None:  # accelerate is not installed
+        return None
+
+    try:
+        state = AcceleratorState()
+    except Exception:  # pragma: no cover - defensive, mirrors accelerate internals
+        return None
+
+    # ``AcceleratorState`` defaults to a single-process configuration when the
+    # script is executed without ``accelerate launch``. We return the state in all
+    # cases so callers can still rely on helper properties like ``is_main_process``.
+    return state
 
 
 def add_cli(parser):
@@ -280,11 +308,32 @@ def create_offline_rl_trainer(
     manual_gin_overrides: Optional[dict] = None,
     mixed_precision: str = "auto",
     enable_compile: bool = True,
-):
+) -> Tuple[MetamonAMAGOExperiment, Optional["AcceleratorState"]]:
     """
     Convenience function that creates an AMAGO experiment with default arguments
-    set for offline RL in metamon.
+    set for offline RL in metamon. Returns the initialized experiment along with
+    the active :class:`accelerate.state.AcceleratorState`, if any.
     """
+    accelerator_state = _get_accelerator_state()
+    num_processes = accelerator_state.num_processes if accelerator_state else 1
+    is_distributed = (
+        accelerator_state is not None
+        and accelerator_state.distributed_type is not None
+        and accelerator_state.distributed_type != getattr(DistributedType, "NO", None)
+        and num_processes > 1
+    )
+    is_main_process = accelerator_state.is_main_process if accelerator_state else True
+
+    if is_main_process:
+        launch_mode = "Accelerate" if is_distributed else "single process"
+        print(
+            f"[INFO] Launch mode: {launch_mode} (num_processes={num_processes})"
+        )
+        print(f"[INFO] Per-process batch size: {batch_size_per_gpu}")
+        print(
+            f"[INFO] Effective global batch size: {batch_size_per_gpu * num_processes}"
+        )
+
     # configuration
     config = {
         "MetamonTstepEncoder.tokenizer": obs_space.tokenizer,
@@ -363,7 +412,7 @@ def create_offline_rl_trainer(
         sample_actions=True,
         force_reset_train_envs_every=None,
         ## logging ##
-        log_to_wandb=log,
+        log_to_wandb=log and is_main_process,
         wandb_project=wandb_project,
         wandb_entity=wandb_entity,
         verbose=True,
@@ -386,7 +435,7 @@ def create_offline_rl_trainer(
         mixed_precision=resolved_mixed_precision,
         compile_model=should_compile,
     )
-    return experiment
+    return experiment, accelerator_state
 
 
 if __name__ == "__main__":
@@ -425,7 +474,7 @@ if __name__ == "__main__":
 
     # quick-setup for an offline RL experiment
     print(f"[DEBUG] Creating offline RL trainer with eval_gens={args.eval_gens}")
-    experiment = create_offline_rl_trainer(
+    experiment, accelerator_state = create_offline_rl_trainer(
         ckpt_dir=args.save_dir,
         run_name=args.run_name,
         model_gin_config=args.model_gin_config,
@@ -475,4 +524,8 @@ if __name__ == "__main__":
         traceback.print_exc()
         raise
 
-    wandb.finish()
+    # Only finalize wandb on the process that initialized it.
+    if wandb.run is not None and (
+        accelerator_state is None or accelerator_state.is_main_process
+    ):
+        wandb.finish()
