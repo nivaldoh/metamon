@@ -5,7 +5,7 @@ import amago.agent
 import amago.experiment
 
 # Training hyperparameters optimized for speed
-MetamonAMAGOExperiment.batch_size = 128  # Large batch size for GPU efficiency
+MetamonAMAGOExperiment.batch_size = 512  # Large batch size for GPU efficiency
 MetamonAMAGOExperiment.dloader_workers = 16  # Multiple workers for fast data loading
 MetamonAMAGOExperiment.epochs = 50  # Reasonable number of epochs for learning
 MetamonAMAGOExperiment.parallel_actors = 48  # No online collection for IL?

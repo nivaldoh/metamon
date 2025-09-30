@@ -5,7 +5,7 @@ import amago.agent
 import amago.experiment
 
 # Training hyperparameters (MINIMAL for testing)
-MetamonAMAGOExperiment.batch_size = 8  # Very small batch
+MetamonAMAGOExperiment.batch_size = 512  # Very small batch
 MetamonAMAGOExperiment.dloader_workers = 1  # Single worker
 MetamonAMAGOExperiment.epochs = 2  # Just 2 epochs for testing
 MetamonAMAGOExperiment.parallel_actors = 0  # No online collection for IL

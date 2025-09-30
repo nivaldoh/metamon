@@ -7,7 +7,7 @@ import amago.experiment
 MetamonAMAGOExperiment.agent_type = @agent.Agent
 MetamonAMAGOExperiment.tstep_encoder_type = @MetamonTstepEncoder
 MetamonAMAGOExperiment.traj_encoder_type = @traj_encoders.TformerTrajEncoder
-MetamonAMAGOExperiment.max_seq_len = 100  # Reasonable sequence length for better learning
+MetamonAMAGOExperiment.max_seq_len = 256
 
 # Small Semantic Actor Configuration
 Agent.actor_type = @MetamonSemanticActor
