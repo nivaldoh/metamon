@@ -718,7 +718,11 @@ class MetamonAMAGOExperiment(amago.Experiment):
     Adds actions masking to the main AMAGO experiment, and leaves room for further tweaks.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, compile_model: bool = False, compile_mode: str = "default", **kwargs):
+        self.compile_model = compile_model and hasattr(torch, "compile")
+        self.compile_mode = compile_mode
+        self._compiled_model = False
+
         # Fix the traj_save_len float issue - ensure it's an integer
         if 'traj_save_len' not in kwargs:
             kwargs['traj_save_len'] = int(1e10)
@@ -818,6 +822,32 @@ class MetamonAMAGOExperiment(amago.Experiment):
             import traceback
             traceback.print_exc()
             raise
+
+        if self.compile_model and not hasattr(torch, "compile"):
+            print("[INFO] torch.compile requested but unavailable; skipping compilation.")
+            self.compile_model = False
+
+        if self.compile_model and not self._compiled_model:
+            module = getattr(self, "agent", None)
+            if isinstance(module, torch.nn.Module):
+                try:
+                    compiled = torch.compile(module, mode=self.compile_mode)
+                    if compiled is not module:
+                        self.agent = compiled
+                    self._compiled_model = True
+                    print("✓ Model compiled with torch.compile")
+                except Exception as err:
+                    warnings.warn(
+                        f"torch.compile failed ({err}); continuing without compilation.",
+                        RuntimeWarning,
+                    )
+                    self.compile_model = False
+            else:
+                warnings.warn(
+                    "Unable to locate agent module for compilation; skipping.",
+                    RuntimeWarning,
+                )
+                self.compile_model = False
 
     def init_dsets(self):
         print("[DEBUG] MetamonAMAGOExperiment.init_dsets() called")

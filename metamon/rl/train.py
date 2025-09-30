@@ -8,6 +8,7 @@ import amago
 
 import metamon
 import metamon.rl
+import torch
 from metamon.env import get_metamon_teams
 from metamon.interface import (
     TokenizedObservationSpace,
@@ -34,6 +35,45 @@ EVAL_OPPONENTS = [
     baselines.heuristic.basic.GymLeader,
     baselines.heuristic.kaizo.EmeraldKaizo,
 ]
+
+
+def _bf16_supported() -> bool:
+    """Return True if the current device supports bf16 training."""
+
+    if not torch.cuda.is_available():
+        return False
+    is_supported = getattr(torch.cuda, "is_bf16_supported", lambda: False)
+    try:
+        return bool(is_supported())
+    except Exception:
+        return False
+
+
+def _resolve_mixed_precision(requested: str) -> str:
+    """Resolve the requested mixed precision mode based on hardware support."""
+
+    requested = requested.lower()
+    if requested not in {"no", "fp16", "bf16", "auto"}:
+        raise ValueError(f"Unsupported mixed precision option: {requested}")
+
+    if requested == "auto":
+        if torch.cuda.is_available():
+            if _bf16_supported():
+                return "bf16"
+            return "fp16"
+        return "no"
+
+    if requested == "bf16" and not _bf16_supported():
+        print("[INFO] bf16 requested but not supported; falling back to fp16/no.")
+        if torch.cuda.is_available():
+            return "fp16"
+        return "no"
+
+    if requested == "fp16" and not torch.cuda.is_available():
+        print("[INFO] fp16 requested but CUDA is unavailable; using full precision.")
+        return "no"
+
+    return requested
 
 
 def add_cli(parser):
@@ -151,6 +191,22 @@ def add_cli(parser):
         default=None,
         help="Showdown battle formats to include in the dataset. Defaults to all supported formats.",
     )
+    parser.add_argument(
+        "--mixed-precision",
+        choices=["no", "fp16", "bf16", "auto"],
+        default="auto",
+        help="Mixed precision mode to use. Defaults to automatic selection based on hardware.",
+    )
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Disable torch.compile optimizations.",
+    )
+    parser.add_argument(
+        "--no-optimize",
+        action="store_true",
+        help="Disable automatic performance optimizations (mixed precision and torch.compile).",
+    )
     parser.add_argument("--log", action="store_true", help="Log to wandb.")
     return parser
 
@@ -222,6 +278,8 @@ def create_offline_rl_trainer(
     wandb_project: str = WANDB_PROJECT,
     wandb_entity: str = WANDB_ENTITY,
     manual_gin_overrides: Optional[dict] = None,
+    mixed_precision: str = "auto",
+    enable_compile: bool = True,
 ):
     """
     Convenience function that creates an AMAGO experiment with default arguments
@@ -268,6 +326,22 @@ def create_offline_rl_trainer(
     # With lazy initialization, we can now use async mode for validation environments
     print(f"[DEBUG] Using env_mode=async for validation environments (lazy initialization enabled)")
 
+    resolved_mixed_precision = _resolve_mixed_precision(mixed_precision)
+    should_compile = enable_compile and hasattr(torch, "compile")
+
+    if resolved_mixed_precision != "no":
+        print(f"✓ Mixed precision enabled: {resolved_mixed_precision}")
+    else:
+        print("[INFO] Mixed precision disabled.")
+
+    if enable_compile and not hasattr(torch, "compile"):
+        print("[INFO] torch.compile unavailable in this PyTorch build; skipping compilation.")
+        should_compile = False
+    elif should_compile:
+        print("✓ torch.compile optimizations enabled (mode=default)")
+    else:
+        print("[INFO] torch.compile disabled.")
+
     experiment = MetamonAMAGOExperiment(
         ## required ##
         run_name=run_name,
@@ -309,7 +383,8 @@ def create_offline_rl_trainer(
         ## optimization ##
         batch_size=batch_size_per_gpu,
         batches_per_update=grad_accum,
-        mixed_precision="no",
+        mixed_precision=resolved_mixed_precision,
+        compile_model=should_compile,
     )
     return experiment
 
@@ -368,6 +443,10 @@ if __name__ == "__main__":
         log=args.log,
         wandb_project=WANDB_PROJECT,
         wandb_entity=WANDB_ENTITY,
+        mixed_precision=("no" if args.no_optimize else args.mixed_precision),
+        enable_compile=(
+            (not args.no_optimize) and (not args.no_compile)
+        ),
     )
     print("[DEBUG] Offline RL trainer created successfully")
     print("[DEBUG] Starting experiment initialization...")
