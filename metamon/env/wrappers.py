@@ -310,6 +310,10 @@ class PokeEnvWrapper(OpenAIGymEnv):
         self.turn_limit = params['turn_limit']
         self.metamon_battle_format = params['battle_format']
 
+        # Initialize lazy space storage
+        self._lazy_action_space = self.metamon_action_space.gym_space
+        self._lazy_observation_space = self.metamon_obs_space.gym_space
+
         # Determine player class for later
         if params['battle_backend'] == "poke-env":
             self.player_class = Player
@@ -366,14 +370,34 @@ class PokeEnvWrapper(OpenAIGymEnv):
         """Return action space, works even before full initialization."""
         if self._initialized:
             return super().action_space
-        return self.metamon_action_space.gym_space
+        return self._lazy_action_space
+
+    @action_space.setter
+    def action_space(self, value):
+        """Set action space."""
+        if self._initialized:
+            # Delegate to parent if initialized
+            object.__setattr__(self, '_action_space', value)
+        else:
+            # Store locally before initialization
+            self._lazy_action_space = value
 
     @property
     def observation_space(self):
         """Return observation space, works even before full initialization."""
         if self._initialized:
             return super().observation_space
-        return self.metamon_obs_space.gym_space
+        return self._lazy_observation_space
+
+    @observation_space.setter
+    def observation_space(self, value):
+        """Set observation space."""
+        if self._initialized:
+            # Delegate to parent if initialized
+            object.__setattr__(self, '_observation_space', value)
+        else:
+            # Store locally before initialization
+            self._lazy_observation_space = value
 
     def get_opponent(self):
         return self._current_opponent
