@@ -795,14 +795,11 @@ class MetamonAMAGOExperiment(amago.Experiment):
             traceback.print_exc()
             raise
 
-        # Only call take_long_break in async mode
-        # In sync mode, this causes hanging due to async operations
-        if self.env_mode == "async":
-            print("[DEBUG] Calling take_long_break on validation environments (async mode)...")
-            amago.utils.call_async_env(self.val_envs, "take_long_break")
-            print("[DEBUG] take_long_break completed")
-        else:
-            print("[DEBUG] Skipping take_long_break in sync mode to avoid hanging")
+        # Call take_long_break on validation environments
+        # With lazy initialization, this is now safe in both async and sync modes
+        print("[DEBUG] Calling take_long_break on validation environments...")
+        amago.utils.call_async_env(self.val_envs, "take_long_break")
+        print("[DEBUG] take_long_break completed")
 
         return out
 
@@ -840,14 +837,13 @@ class MetamonAMAGOExperiment(amago.Experiment):
         print("[DEBUG] super().init_dloaders() completed")
 
     def evaluate_val(self):
-        # Only use pause/resume in async mode to avoid hanging
-        if self.env_mode == "async":
-            amago.utils.call_async_env(self.val_envs, "resume_from_break")
+        # Resume from break before evaluation
+        amago.utils.call_async_env(self.val_envs, "resume_from_break")
 
         out = super().evaluate_val()
 
-        if self.env_mode == "async":
-            amago.utils.call_async_env(self.val_envs, "take_long_break")
+        # Take a break after evaluation
+        amago.utils.call_async_env(self.val_envs, "take_long_break")
 
         return out
 

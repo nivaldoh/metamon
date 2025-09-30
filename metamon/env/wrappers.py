@@ -162,7 +162,7 @@ def _check_avatar(avatar: str):
 
 class PokeEnvWrapper(OpenAIGymEnv):
     """A thin wrapper around poke-env's OpenAIGymEnv that handles the observation space,
-    action space, and reward function while adding some basic conveniences.
+    action space, and reward function while adding some basic conveniences with lazy initialization.
 
     Args:
         battle_format: The battle format of the team files (e.g. "gen1ou", "gen2ubers",
@@ -231,32 +231,64 @@ class PokeEnvWrapper(OpenAIGymEnv):
         save_team_results_to: Optional[str] = None,
         battle_backend: str = "poke-env",
     ):
-        opponent_team_set = opponent_team_set or copy.deepcopy(player_team_set)
+        # Mark as not initialized for lazy initialization
+        self._initialized = False
+
+        # Store all initialization parameters for later
+        self._init_params = {
+            'battle_format': battle_format,
+            'observation_space': observation_space,
+            'action_space': action_space,
+            'reward_function': reward_function,
+            'player_team_set': player_team_set,
+            'opponent_type': opponent_type,
+            'opponent_team_set': opponent_team_set,
+            'player_username': player_username,
+            'player_password': player_password,
+            'opponent_username': opponent_username,
+            'player_avatar': player_avatar,
+            'opponent_avatar': opponent_avatar,
+            'start_challenging': start_challenging,
+            'start_timer_on_battle_start': start_timer_on_battle_start,
+            'turn_limit': turn_limit,
+            'save_trajectories_to': save_trajectories_to,
+            'save_team_results_to': save_team_results_to,
+            'battle_backend': battle_backend,
+        }
+
+        # Set up attributes that don't require network connections
+        self._setup_basic_attributes()
+
+    def _setup_basic_attributes(self):
+        """Set up attributes that don't require network connections."""
+        params = self._init_params
+        opponent_team_set = params['opponent_team_set'] or copy.deepcopy(params['player_team_set'])
         random_username = (
             lambda: f"MM-{''.join(str(random.randint(0, 9)) for _ in range(10))}"
         )
-        self.player_username = player_username or random_username()
-        self.opponent_username = opponent_username or random_username()
+        self.player_username = params['player_username'] or random_username()
+        self.opponent_username = params['opponent_username'] or random_username()
 
-        player_account_configuration = AccountConfiguration(
-            self.player_username, player_password
+        # Store configurations for later use
+        self.player_account_configuration = AccountConfiguration(
+            self.player_username, params['player_password']
         )
-        opponent_account_configuration = AccountConfiguration(
+        self.opponent_account_configuration = AccountConfiguration(
             self.opponent_username, None
         )
-        if save_trajectories_to is not None:
+        if params['save_trajectories_to'] is not None:
             self.save_trajectories_to = os.path.join(
-                save_trajectories_to, battle_format
+                params['save_trajectories_to'], params['battle_format']
             )
             os.makedirs(self.save_trajectories_to, exist_ok=True)
         else:
             self.save_trajectories_to = None
 
-        if save_team_results_to is not None:
-            os.makedirs(save_team_results_to, exist_ok=True)
+        if params['save_team_results_to'] is not None:
+            os.makedirs(params['save_team_results_to'], exist_ok=True)
             self.save_team_results_to = os.path.join(
-                save_team_results_to,
-                f"battle_log_{self.player_username}_{battle_format}.csv",
+                params['save_team_results_to'],
+                f"battle_log_{self.player_username}_{params['battle_format']}.csv",
             )
             if not os.path.exists(self.save_team_results_to):
                 with open(self.save_team_results_to, "a") as f:
@@ -266,46 +298,64 @@ class PokeEnvWrapper(OpenAIGymEnv):
         else:
             self.save_team_results_to = None
 
-        if opponent_type is not None:
-            self.metamon_opponent_name = opponent_type.__name__
-            self._current_opponent = opponent_type(
-                battle_format=battle_format,
-                team=opponent_team_set,
-                account_configuration=opponent_account_configuration,
-                server_configuration=self.server_configuration,
-                avatar=_check_avatar(opponent_avatar),
-                ping_timeout=None,
-            )
-        else:
-            self._current_opponent = None
-            self.metamon_opponent_name = None
+        # Store opponent info for lazy initialization
+        self.metamon_opponent_name = params['opponent_type'].__name__ if params['opponent_type'] else None
+        self._current_opponent = None  # Will be created during lazy init
 
-        self.reward_function = copy.deepcopy(reward_function)
-        self.metamon_obs_space = copy.deepcopy(observation_space)
-        self.metamon_action_space = copy.deepcopy(action_space)
-        self.metamon_team_set = player_team_set
-        self.turn_limit = turn_limit
-        self.metamon_battle_format = battle_format
+        # Copy these immediately as they don't involve network connections
+        self.reward_function = copy.deepcopy(params['reward_function'])
+        self.metamon_obs_space = copy.deepcopy(params['observation_space'])
+        self.metamon_action_space = copy.deepcopy(params['action_space'])
+        self.metamon_team_set = params['player_team_set']
+        self.turn_limit = params['turn_limit']
+        self.metamon_battle_format = params['battle_format']
 
-        if battle_backend == "poke-env":
-            player_class = Player
-        elif battle_backend == "metamon":
-            player_class = MetamonPlayer
+        # Determine player class for later
+        if params['battle_backend'] == "poke-env":
+            self.player_class = Player
+        elif params['battle_backend'] == "metamon":
+            self.player_class = MetamonPlayer
         else:
             raise ValueError(
-                f"Invalid battle backend: {battle_backend}. Options are 'poke-env' or 'metamon'."
+                f"Invalid battle backend: {params['battle_backend']}. Options are 'poke-env' or 'metamon'."
             )
 
+        # Store other parameters needed for parent init
+        self._checked_player_avatar = _check_avatar(params['player_avatar'])
+        self._checked_opponent_avatar = _check_avatar(params['opponent_avatar'])
+
+    def _ensure_initialized(self):
+        """Initialize the actual Player connections if not already done."""
+        if self._initialized:
+            return
+
+        params = self._init_params
+
+        # Create opponent if needed
+        if params['opponent_type'] is not None:
+            opponent_team_set = params['opponent_team_set'] or copy.deepcopy(params['player_team_set'])
+            self._current_opponent = params['opponent_type'](
+                battle_format=params['battle_format'],
+                team=opponent_team_set,
+                account_configuration=self.opponent_account_configuration,
+                server_configuration=self.server_configuration,
+                avatar=self._checked_opponent_avatar,
+                ping_timeout=None,
+            )
+
+        # Initialize parent class (creates Player with network connection)
         super().__init__(
-            player_class=player_class,
-            battle_format=battle_format,
+            player_class=self.player_class,
+            battle_format=params['battle_format'],
             server_configuration=self.server_configuration,
-            account_configuration=player_account_configuration,
-            team=player_team_set,
-            avatar=_check_avatar(player_avatar),
-            start_timer_on_battle_start=start_timer_on_battle_start,
-            start_challenging=start_challenging,
+            account_configuration=self.player_account_configuration,
+            team=params['player_team_set'],
+            avatar=self._checked_player_avatar,
+            start_timer_on_battle_start=params['start_timer_on_battle_start'],
+            start_challenging=params['start_challenging'],
         )
+
+        self._initialized = True
 
     @property
     def server_configuration(self):
@@ -321,6 +371,9 @@ class PokeEnvWrapper(OpenAIGymEnv):
         return self.choose_random_move(battle)
 
     def reset(self, *args, **kwargs):
+        # Ensure initialization before first use
+        self._ensure_initialized()
+
         self.metamon_obs_space.reset()
         self.invalid_action_counter = 0
         self.valid_action_counter = 0
@@ -372,6 +425,9 @@ class PokeEnvWrapper(OpenAIGymEnv):
         return self.metamon_obs_space.state_to_obs(universal_state)
 
     def step(self, action):
+        # Ensure initialization before first use
+        self._ensure_initialized()
+
         self.turn_counter += 1
         next_obs, reward, terminated, truncated, info = super().step(action)
         info["legal_actions"] = self._most_recent_legal_actions
@@ -431,11 +487,15 @@ class PokeEnvWrapper(OpenAIGymEnv):
         return next_obs, reward, terminated, truncated, info
 
     def take_long_break(self):
-        self.close(purge=False)
-        self.reset_battles()
+        # Only close if we've been initialized
+        if self._initialized:
+            self.close(purge=False)
+            self.reset_battles()
 
     def resume_from_break(self):
-        self.start_challenging()
+        # Only start challenging if we've been initialized
+        if self._initialized:
+            self.start_challenging()
 
 
 class BattleAgainstBaseline(PokeEnvWrapper):

@@ -265,9 +265,8 @@ def create_offline_rl_trainer(
         val_timesteps_per_epoch = 0
 
     print("[DEBUG] Creating MetamonAMAGOExperiment...")
-    # Use sync mode for validation environments to avoid pickling issues with poke-env
-    val_env_mode = "sync" if eval_gens else "async"
-    print(f"[DEBUG] Using env_mode={val_env_mode} for validation environments")
+    # With lazy initialization, we can now use async mode for validation environments
+    print(f"[DEBUG] Using env_mode=async for validation environments (lazy initialization enabled)")
 
     experiment = MetamonAMAGOExperiment(
         ## required ##
@@ -282,7 +281,7 @@ def create_offline_rl_trainer(
         ## environment ##
         make_train_env=partial(make_placeholder_env, obs_space, action_space),
         make_val_env=make_envs,
-        env_mode=val_env_mode,
+        env_mode="async",  # Now we can use async mode thanks to lazy initialization
         async_env_mp_context=async_env_mp_context,
         parallel_actors=len(make_envs),
         # no exploration
