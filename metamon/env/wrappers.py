@@ -361,6 +361,20 @@ class PokeEnvWrapper(OpenAIGymEnv):
     def server_configuration(self):
         return LocalhostServerConfiguration
 
+    @property
+    def action_space(self):
+        """Return action space, works even before full initialization."""
+        if self._initialized:
+            return super().action_space
+        return self.metamon_action_space.gym_space
+
+    @property
+    def observation_space(self):
+        """Return observation space, works even before full initialization."""
+        if self._initialized:
+            return super().observation_space
+        return self.metamon_obs_space.gym_space
+
     def get_opponent(self):
         return self._current_opponent
 
