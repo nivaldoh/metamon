@@ -22,7 +22,7 @@ from metamon.interface import (
 from metamon.data.download import download_parsed_replays
 
 
-CACHE_VERSION = "parsed-replay-cache-v1"
+CACHE_VERSION = "parsed-replay-cache-v2"
 
 
 class ParsedReplayDataset(Dataset):
@@ -341,6 +341,24 @@ class ParsedReplayDataset(Dataset):
         dones = np.zeros_like(rewards, dtype=bool)
         dones[-1] = True
 
+        return dict(nested_obs), action_infos, rewards, dones
+
+    def load_filename(self, filename: str):
+        cache_path = self._cache_path(filename)
+        use_cache = not getattr(self, "rebuild_cache", False)
+
+        if use_cache:
+            cached = self._load_from_cache(cache_path)
+            if cached is not None:
+                nested_obs, action_infos, rewards, dones = cached
+            else:
+                nested_obs, action_infos, rewards, dones = self._compute_trajectory(filename)
+                self._save_to_cache(cache_path, nested_obs, action_infos, rewards, dones)
+        else:
+            nested_obs, action_infos, rewards, dones = self._compute_trajectory(filename)
+            self._save_to_cache(cache_path, nested_obs, action_infos, rewards, dones)
+
+        # Apply random slicing AFTER loading from cache (for data augmentation)
         if self.max_seq_len is not None:
             # s s s s s s s s
             # a a a a a a a
@@ -360,19 +378,6 @@ class ParsedReplayDataset(Dataset):
             rewards = rewards[safe_start : safe_start + self.max_seq_len]
             dones = dones[safe_start : safe_start + self.max_seq_len]
 
-        return dict(nested_obs), action_infos, rewards, dones
-
-    def load_filename(self, filename: str):
-        cache_path = self._cache_path(filename)
-        use_cache = not getattr(self, "rebuild_cache", False)
-
-        if use_cache:
-            cached = self._load_from_cache(cache_path)
-            if cached is not None:
-                return cached
-
-        nested_obs, action_infos, rewards, dones = self._compute_trajectory(filename)
-        self._save_to_cache(cache_path, nested_obs, action_infos, rewards, dones)
         return nested_obs, action_infos, rewards, dones
 
     def random_sample(self):
