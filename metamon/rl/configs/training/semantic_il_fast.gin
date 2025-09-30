@@ -5,10 +5,10 @@ import amago.agent
 import amago.experiment
 
 # Training hyperparameters optimized for speed
-MetamonAMAGOExperiment.batch_size = 64  # Large batch size for GPU efficiency
-MetamonAMAGOExperiment.dloader_workers = 8  # Multiple workers for fast data loading
+MetamonAMAGOExperiment.batch_size = 128  # Large batch size for GPU efficiency
+MetamonAMAGOExperiment.dloader_workers = 16  # Multiple workers for fast data loading
 MetamonAMAGOExperiment.epochs = 50  # Reasonable number of epochs for learning
-MetamonAMAGOExperiment.parallel_actors = 0  # No online collection for IL
+MetamonAMAGOExperiment.parallel_actors = 48  # No online collection for IL?
 MetamonAMAGOExperiment.val_interval = 5  # Validate every 5 epochs to save time
 MetamonAMAGOExperiment.train_batches_per_epoch = 1000  # More batches per epoch
 MetamonAMAGOExperiment.val_timesteps_per_epoch = 1000  # ~2 battles for validation
@@ -22,10 +22,10 @@ MetamonAMAGOExperiment.critic_loss_weight = 10.0
 MetamonAMAGOExperiment.lr_warmup_steps = 500  # Shorter warmup
 
 # Use gradient accumulation if batch size is too large for memory
-MetamonAMAGOExperiment.batches_per_update = 1  # Set to 2 or 4 if OOM
+MetamonAMAGOExperiment.batches_per_update = 4  # Set to 2 or 4 if OOM
 
 # Mixed precision training for speedup (if GPU supports it)
-MetamonAMAGOExperiment.mixed_precision = "no"  # Set to "fp16" if you have a modern GPU
+MetamonAMAGOExperiment.mixed_precision = "fp16"  # Set to "fp16" if you have a modern GPU
 
 # Agent configuration for IL (behavior cloning)
 agent.Agent.online_coeff = 0.0  # No online (TD3-like) loss
