@@ -1,0 +1,39 @@
+# Fast Semantic Actor Imitation Learning Configuration
+# Optimized for maximum training speed with reasonable batch sizes
+
+import amago.agent
+import amago.experiment
+
+# Training hyperparameters optimized for speed
+MetamonAMAGOExperiment.batch_size = 64  # Large batch size for GPU efficiency
+MetamonAMAGOExperiment.dloader_workers = 8  # Multiple workers for fast data loading
+MetamonAMAGOExperiment.epochs = 50  # Reasonable number of epochs for learning
+MetamonAMAGOExperiment.parallel_actors = 0  # No online collection for IL
+MetamonAMAGOExperiment.val_interval = 5  # Validate every 5 epochs to save time
+MetamonAMAGOExperiment.train_batches_per_epoch = 1000  # More batches per epoch
+MetamonAMAGOExperiment.val_timesteps_per_epoch = 1000  # ~2 battles for validation
+MetamonAMAGOExperiment.start_learning_at_epoch = 0
+MetamonAMAGOExperiment.start_collecting_at_epoch = 10000  # Never (pure offline)
+MetamonAMAGOExperiment.ckpt_interval = 10  # Save checkpoints less frequently
+MetamonAMAGOExperiment.l2_coeff = 1e-4
+MetamonAMAGOExperiment.learning_rate = 3e-4  # Higher learning rate for faster convergence
+MetamonAMAGOExperiment.grad_clip = 2.0  # Slightly higher gradient clipping
+MetamonAMAGOExperiment.critic_loss_weight = 10.0
+MetamonAMAGOExperiment.lr_warmup_steps = 500  # Shorter warmup
+
+# Use gradient accumulation if batch size is too large for memory
+MetamonAMAGOExperiment.batches_per_update = 1  # Set to 2 or 4 if OOM
+
+# Mixed precision training for speedup (if GPU supports it)
+MetamonAMAGOExperiment.mixed_precision = "no"  # Set to "fp16" if you have a modern GPU
+
+# Agent configuration for IL (behavior cloning)
+agent.Agent.online_coeff = 0.0  # No online (TD3-like) loss
+agent.Agent.offline_coeff = 1.0  # Pure offline (BC) loss
+agent.Agent.use_multigamma = False  # Single gamma for IL
+agent.Agent.fake_filter = True  # No advantage filtering for pure BC
+agent.Agent.gamma = 0.999
+agent.Agent.tau = 1e-3  # Target EMA weight
+
+# Additional semantic actor specific settings
+MetamonSemanticActor.dropout = 0.1  # Reasonable dropout for IL

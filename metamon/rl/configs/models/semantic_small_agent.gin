@@ -7,20 +7,20 @@ import amago.experiment
 MetamonAMAGOExperiment.agent_type = @agent.Agent
 MetamonAMAGOExperiment.tstep_encoder_type = @MetamonTstepEncoder
 MetamonAMAGOExperiment.traj_encoder_type = @traj_encoders.TformerTrajEncoder
-MetamonAMAGOExperiment.max_seq_len = 50  # Very short sequences for testing
+MetamonAMAGOExperiment.max_seq_len = 100  # Reasonable sequence length for better learning
 
 # Small Semantic Actor Configuration
 Agent.actor_type = @MetamonSemanticActor
 Agent.pass_obs_keys_to_actor = ["illegal_actions"]
 
-# Small model hyperparameters (MINIMAL for testing)
+# Small but effective model hyperparameters
 MetamonSemanticActor.mask_illegal_actions = True
-MetamonSemanticActor.descriptor_hidden_dim = 32  # Very small
-MetamonSemanticActor.action_emb_dim = 16  # Very small
-MetamonSemanticActor.num_attention_heads = 1  # Single head
+MetamonSemanticActor.descriptor_hidden_dim = 64  # Slightly bigger for better representation
+MetamonSemanticActor.action_emb_dim = 32  # Better action embeddings
+MetamonSemanticActor.num_attention_heads = 2  # Multi-head for better attention
 MetamonSemanticActor.use_gate = True
 MetamonSemanticActor.use_bilinear_scoring = False
-MetamonSemanticActor.dropout = 0.05
+MetamonSemanticActor.dropout = 0.1  # Reasonable dropout
 MetamonSemanticActor.normalize_descriptors = True
 MetamonSemanticActor.cache_embeddings = True
 MetamonSemanticActor.fallback_mlp = False
@@ -33,15 +33,15 @@ actor_critic.NCritics.d_hidden = 256  # Smaller
 Agent.popart = True
 Agent.num_critics = 2  # Fewer critics
 
-# Turn embedding architecture (smaller)
-MetamonTstepEncoder.extra_emb_dim = 16
-MetamonTstepEncoder.d_model = 64  # Smaller
-MetamonTstepEncoder.n_layers = 2
+# Turn embedding architecture (optimized small)
+MetamonTstepEncoder.extra_emb_dim = 32
+MetamonTstepEncoder.d_model = 128  # Bigger for better representation
+MetamonTstepEncoder.n_layers = 3  # One more layer for better processing
 MetamonTstepEncoder.n_heads = 4
-MetamonTstepEncoder.scratch_tokens = 2
-MetamonTstepEncoder.numerical_tokens = 4
-MetamonTstepEncoder.token_mask_aug = False
-MetamonTstepEncoder.dropout = 0.05
+MetamonTstepEncoder.scratch_tokens = 4  # More scratch space
+MetamonTstepEncoder.numerical_tokens = 6  # More numerical tokens
+MetamonTstepEncoder.token_mask_aug = True  # Enable augmentation for better generalization
+MetamonTstepEncoder.dropout = 0.1
 
 # Trajectory encoder (smaller transformer)
 traj_encoders.TformerTrajEncoder.n_layers = 2
