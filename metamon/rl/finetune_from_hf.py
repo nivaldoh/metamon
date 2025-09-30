@@ -3,11 +3,13 @@ import wandb
 from metamon.rl.train import (
     create_offline_dataset,
     create_offline_rl_trainer,
+    build_gcs_checkpoint_manager,
     WANDB_PROJECT,
     WANDB_ENTITY,
 )
 from metamon.rl.pretrained import get_pretrained_model_names, get_pretrained_model
 from metamon.interface import get_reward_function_names, get_reward_function
+from metamon.rl.gcs_checkpoint import train_with_gcs_checkpoints
 
 
 def add_cli(parser):
@@ -21,6 +23,42 @@ def add_cli(parser):
         type=str,
         required=True,
         help="Path to save your custom checkpoints. Find checkpoints under save_dir/run_name/ckpts/",
+    )
+    parser.add_argument(
+        "--gcs_bucket",
+        type=str,
+        default=None,
+        help="Optional Google Cloud Storage bucket to mirror checkpoints into.",
+    )
+    parser.add_argument(
+        "--gcs_project",
+        type=str,
+        default=None,
+        help="Optional Google Cloud project for the storage client.",
+    )
+    parser.add_argument(
+        "--gcs_base_path",
+        type=str,
+        default="training-runs",
+        help="Prefix inside the bucket for storing checkpoints.",
+    )
+    parser.add_argument(
+        "--gcs_upload_every",
+        type=int,
+        default=5,
+        help="Upload to GCS after this many local checkpoint saves.",
+    )
+    parser.add_argument(
+        "--gcs_keep_local",
+        type=int,
+        default=2,
+        help="Number of most recent checkpoints to keep on local storage (negative to disable cleanup).",
+    )
+    parser.add_argument(
+        "--gcs_chunk_size_mb",
+        type=int,
+        default=256,
+        help="Chunk size in MiB for resumable GCS uploads/downloads (<=0 for library default).",
     )
     parser.add_argument(
         "--finetune_from_model",
@@ -170,6 +208,24 @@ if __name__ == "__main__":
         wandb_entity=WANDB_ENTITY,
         manual_gin_overrides=pretrained.gin_overrides,
     )
+    gcs_manager = build_gcs_checkpoint_manager(
+        bucket_name=args.gcs_bucket,
+        project=args.gcs_project,
+        base_path=args.gcs_base_path,
+        local_ckpt_dir=args.save_dir,
+        run_name=args.run_name,
+        chunk_size_mb=args.gcs_chunk_size_mb,
+    )
+    if gcs_manager is not None:
+        print(
+            "[DEBUG] GCS checkpoint uploads enabled (bucket=%s, base_path=%s, "
+            "upload_every=%s, keep_local=%s)" % (
+                args.gcs_bucket,
+                gcs_manager.gcs_base_path or "<root>",
+                args.gcs_upload_every,
+                args.gcs_keep_local,
+            )
+        )
     experiment.start()
     # load the pretrained checkpoint
     checkpoint = args.finetune_from_checkpoint or pretrained.default_checkpoint
@@ -179,5 +235,13 @@ if __name__ == "__main__":
         is_accelerate_state=False,
     )
     # finetune!
-    experiment.learn()
+    if gcs_manager is not None:
+        train_with_gcs_checkpoints(
+            gcs_manager=gcs_manager,
+            experiment=experiment,
+            gcs_upload_every_n_epochs=args.gcs_upload_every,
+            keep_local_checkpoints=args.gcs_keep_local,
+        )
+    else:
+        experiment.learn()
     wandb.finish()

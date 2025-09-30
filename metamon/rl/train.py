@@ -23,6 +23,10 @@ from metamon.rl.metamon_to_amago import (
     make_baseline_env,
     make_placeholder_env,
 )
+from metamon.rl.gcs_checkpoint import (
+    GCSCheckpointManager,
+    train_with_gcs_checkpoints,
+)
 from metamon import baselines
 
 
@@ -76,6 +80,48 @@ def _resolve_mixed_precision(requested: str) -> str:
     return requested
 
 
+def build_gcs_checkpoint_manager(
+    *,
+    bucket_name: Optional[str],
+    project: Optional[str],
+    base_path: str,
+    local_ckpt_dir: str,
+    run_name: str,
+    chunk_size_mb: Optional[int] = 256,
+) -> Optional[GCSCheckpointManager]:
+    """Construct a :class:`GCSCheckpointManager` when bucket details are provided."""
+
+    if not bucket_name:
+        return None
+
+    try:
+        from google.cloud import storage  # type: ignore
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError(
+            "google-cloud-storage must be installed to enable --gcs-bucket uploads."
+        ) from exc
+
+    client_kwargs = {}
+    if project:
+        client_kwargs["project"] = project
+
+    storage_client = storage.Client(**client_kwargs)
+    bucket = storage_client.bucket(bucket_name)
+
+    if chunk_size_mb is None or chunk_size_mb <= 0:
+        chunk_size = None
+    else:
+        chunk_size = int(chunk_size_mb * 1024 * 1024)
+
+    return GCSCheckpointManager(
+        bucket=bucket,
+        run_name=run_name,
+        gcs_base_path=(base_path or "").strip("/"),
+        local_ckpt_dir=local_ckpt_dir,
+        chunk_size=chunk_size,
+    )
+
+
 def add_cli(parser):
     parser.add_argument(
         "--run_name",
@@ -105,6 +151,42 @@ def add_cli(parser):
         type=str,
         required=True,
         help="Path to save checkpoints. Find checkpoints under {save_dir}/{run_name}/ckpts/",
+    )
+    parser.add_argument(
+        "--gcs_bucket",
+        type=str,
+        default=None,
+        help="Optional Google Cloud Storage bucket to mirror checkpoints into.",
+    )
+    parser.add_argument(
+        "--gcs_project",
+        type=str,
+        default=None,
+        help="Optional Google Cloud project for the storage client.",
+    )
+    parser.add_argument(
+        "--gcs_base_path",
+        type=str,
+        default="training-runs",
+        help="Prefix inside the bucket for storing checkpoints.",
+    )
+    parser.add_argument(
+        "--gcs_upload_every",
+        type=int,
+        default=5,
+        help="Upload to GCS after this many local checkpoint saves.",
+    )
+    parser.add_argument(
+        "--gcs_keep_local",
+        type=int,
+        default=2,
+        help="Number of most recent checkpoints to keep on local storage (negative to disable cleanup).",
+    )
+    parser.add_argument(
+        "--gcs_chunk_size_mb",
+        type=int,
+        default=256,
+        help="Chunk size in MiB for resumable GCS uploads/downloads (<=0 for library default).",
     )
     parser.add_argument(
         "--ckpt",
@@ -449,6 +531,25 @@ if __name__ == "__main__":
         ),
     )
     print("[DEBUG] Offline RL trainer created successfully")
+
+    gcs_manager = build_gcs_checkpoint_manager(
+        bucket_name=args.gcs_bucket,
+        project=args.gcs_project,
+        base_path=args.gcs_base_path,
+        local_ckpt_dir=args.save_dir,
+        run_name=args.run_name,
+        chunk_size_mb=args.gcs_chunk_size_mb,
+    )
+    if gcs_manager is not None:
+        print(
+            "[DEBUG] GCS checkpoint uploads enabled (bucket=%s, base_path=%s, "
+            "upload_every=%s, keep_local=%s)" % (
+                args.gcs_bucket,
+                gcs_manager.gcs_base_path or "<root>",
+                args.gcs_upload_every,
+                args.gcs_keep_local,
+            )
+        )
     print("[DEBUG] Starting experiment initialization...")
     try:
         experiment.start()
@@ -467,7 +568,15 @@ if __name__ == "__main__":
 
     print("[DEBUG] Starting learning phase...")
     try:
-        experiment.learn()
+        if gcs_manager is not None:
+            train_with_gcs_checkpoints(
+                gcs_manager=gcs_manager,
+                experiment=experiment,
+                gcs_upload_every_n_epochs=args.gcs_upload_every,
+                keep_local_checkpoints=args.gcs_keep_local,
+            )
+        else:
+            experiment.learn()
         print("[DEBUG] Learning completed successfully")
     except Exception as e:
         print(f"[DEBUG ERROR] Failed during learning: {e}")
