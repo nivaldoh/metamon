@@ -378,6 +378,14 @@ class PokeEnvWrapper(OpenAIGymEnv):
     def get_opponent(self):
         return self._current_opponent
 
+    def close(self):
+        """Close environment, handling lazy initialization."""
+        if not self._initialized:
+            # If never initialized, nothing to close
+            return
+        # Otherwise delegate to parent
+        super().close()
+
     def action_space_size(self):
         return self.metamon_action_space.gym_space.n
 
