@@ -2,7 +2,7 @@ import os
 import json
 import random
 import copy
-from typing import Optional, Dict, Tuple, List, Any, Set
+from typing import Optional, Dict, Tuple, List, Any
 from datetime import datetime
 from collections import defaultdict
 
@@ -20,6 +20,9 @@ from metamon.interface import (
     UniversalAction,
 )
 from metamon.data.download import download_parsed_replays
+
+
+CACHE_VERSION = "parsed-replay-cache-v1"
 
 
 class ParsedReplayDataset(Dataset):
@@ -127,6 +130,7 @@ class ParsedReplayDataset(Dataset):
         self.verbose = verbose
         self.max_seq_len = max_seq_len
         self.shuffle = shuffle
+        self.rebuild_cache = False
         self.refresh_files()
 
     def parse_battle_date(self, filename: str) -> datetime:
@@ -235,7 +239,67 @@ class ParsedReplayDataset(Dataset):
             raise ValueError(f"Unknown file extension: {filename}")
         return data
 
-    def load_filename(self, filename: str):
+    def _cache_path(self, filename: str) -> str:
+        return f"{filename}.cache.npz"
+
+    def _load_from_cache(self, cache_path: str):
+        if not os.path.exists(cache_path):
+            return None
+        try:
+            with np.load(cache_path, allow_pickle=True) as data:
+                if "version" not in data:
+                    return None
+                version_arr = data["version"]
+                try:
+                    version = version_arr.item()
+                except ValueError:
+                    version = str(version_arr)
+                if version != CACHE_VERSION:
+                    return None
+                nested_obs = data["nested_obs"][0]
+                action_infos = data["action_infos"][0]
+                rewards = data["rewards"].copy()
+                dones = data["dones"].copy()
+        except Exception:
+            return None
+
+        nested_obs_dict = {
+            key: list(values) for key, values in dict(nested_obs).items()
+        }
+        action_infos_dict = {
+            key: list(values) for key, values in dict(action_infos).items()
+        }
+        return nested_obs_dict, action_infos_dict, rewards, dones
+
+    def _save_to_cache(
+        self,
+        cache_path: str,
+        nested_obs: Dict[str, list[np.ndarray]],
+        action_infos: Dict[str, list[Any]],
+        rewards: np.ndarray,
+        dones: np.ndarray,
+    ) -> None:
+        tmp_path = f"{cache_path}.tmp"
+        try:
+            np.savez_compressed(
+                tmp_path,
+                version=np.array(CACHE_VERSION),
+                nested_obs=np.array([nested_obs], dtype=object),
+                action_infos=np.array([action_infos], dtype=object),
+                rewards=rewards,
+                dones=dones,
+            )
+            os.replace(tmp_path, cache_path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+    def _compute_trajectory(
+        self, filename: str
+    ) -> Tuple[Dict[str, list[np.ndarray]], Dict[str, list[Any]], np.ndarray, np.ndarray]:
         data = self._load_json(filename)
         states = [UniversalState.from_dict(s) for s in data["states"]]
         # reset the observation space, then call once on each state, which lets
@@ -298,6 +362,19 @@ class ParsedReplayDataset(Dataset):
 
         return dict(nested_obs), action_infos, rewards, dones
 
+    def load_filename(self, filename: str):
+        cache_path = self._cache_path(filename)
+        use_cache = not getattr(self, "rebuild_cache", False)
+
+        if use_cache:
+            cached = self._load_from_cache(cache_path)
+            if cached is not None:
+                return cached
+
+        nested_obs, action_infos, rewards, dones = self._compute_trajectory(filename)
+        self._save_to_cache(cache_path, nested_obs, action_infos, rewards, dones)
+        return nested_obs, action_infos, rewards, dones
+
     def random_sample(self):
         filename = random.choice(self.filenames)
         return self.load_filename(filename)
@@ -325,6 +402,7 @@ if __name__ == "__main__":
     parser.add_argument("--dset_root", type=str, default=None)
     parser.add_argument("--formats", type=str, default=None, nargs="+")
     parser.add_argument("--obs_space", type=str, default="DefaultObservationSpace")
+    parser.add_argument("--rebuild-cache", action="store_true")
     args = parser.parse_args()
 
     dset = ParsedReplayDataset(
@@ -339,5 +417,7 @@ if __name__ == "__main__":
         verbose=True,
         shuffle=True,
     )
+    if args.rebuild_cache:
+        dset.rebuild_cache = True
     for i in tqdm.tqdm(range(len(dset))):
         obs, actions, rewards, dones = dset[i]
