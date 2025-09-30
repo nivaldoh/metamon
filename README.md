@@ -543,7 +543,27 @@ We might retrain the "`SmallIL`" model like this:
 ```bash
 python -m metamon.rl.train --run_name AnyNameHere --model_gin_config small_agent.gin --train_gin_config il.gin --save_dir ~/my_checkpoint_path/ --log
 ```
-"`SmallRL`" would be the same command with `--train_gin_config exp_rl.gin`. Scan `rl/pretrained.py` to see the configs used by each pretrained agent. Larger training runs take *days* to complete and [can (optionally) use mulitple GPUs (link)](https://ut-austin-rpl.github.io/amago/tutorial/async.html#multi-gpu-training). An example of a smaller RNN config is provided in `small_rnn.gin`. 
+"`SmallRL`" would be the same command with `--train_gin_config exp_rl.gin`. Scan `rl/pretrained.py` to see the configs used by each pretrained agent. Larger training runs take *days* to complete and can optionally use multiple GPUs via [🤗 Accelerate](https://github.com/huggingface/accelerate). An example of a smaller RNN config is provided in `small_rnn.gin`.
+
+#### Multi-GPU Training (Single Node)
+
+Metamon's training loop is fully compatible with `accelerate launch` for data-parallel training on a single machine. Each GPU receives the exact `--batch_size_per_gpu` that you specify, so the effective global batch is `batch_size_per_gpu * num_gpus`.
+
+1. Configure Accelerate once:
+   ```bash
+   accelerate config
+   ```
+   Choose the multi-GPU option and answer "no" for unused features (DeepSpeed, FSDP, etc.).
+2. Launch training with Accelerate:
+   ```bash
+   accelerate launch --multi_gpu --num_processes 4 -m metamon.rl.train --run_name AnyNameHere --model_gin_config small_agent.gin --train_gin_config il.gin --save_dir ~/my_checkpoint_path/ --log
+   ```
+   Replace `--num_processes` with the number of GPUs you intend to use. Single-GPU runs remain unchanged:
+   ```bash
+   python -m metamon.rl.train --run_name ...
+   ```
+
+During startup the script prints the detected number of processes, the per-device batch size, and the resulting global batch size so you can double-check the launch configuration.
 
 <br>
 
