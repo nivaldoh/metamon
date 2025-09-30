@@ -8,6 +8,13 @@ from metamon.rl.evaluate import (
     pretrained_vs_local_ladder,
     pretrained_vs_baselines,
 )
+from metamon.rl.gcs_checkpoint import (
+    GCSCheckpointManager,
+    GCSCheckpointPatch,
+    UploadResult,
+    patch_experiment_for_gcs,
+    train_with_gcs_checkpoints,
+)
 
 import os
 
